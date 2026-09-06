@@ -40,11 +40,22 @@ struct SwiftMIDIcuratorMainView: View {
     @State private var previousClipID: UUID?
     @Environment(\.colorScheme) private var colorScheme
 
-    private var theme: MelGenTheme { colorScheme == .dark ? .dark : .light }
+    /// The chosen theme, or the host's when nothing has been chosen.
+    ///
+    /// An AUv3 lives inside somebody else's window, and a host can present dark
+    /// chrome while handing the extension a light environment — or change its
+    /// mind when the plug-in moves between a rack and a full-screen view.
+    private var theme: MelGenTheme { themePreference.theme(in: colorScheme) }
+
+    @AppStorage("SwiftMIDIcurator.theme") private var themeRaw = ThemePreference.system.rawValue
+    private var themePreference: ThemePreference {
+        ThemePreference(rawValue: themeRaw) ?? .system
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MelGenMetrics.space3) {
+                settingsRow
                 header
                 if let clip = state.currentClip {
                     roll(for: clip)
@@ -318,5 +329,25 @@ struct SwiftMIDIcuratorMainView: View {
     private func apply(_ next: CuratorState) {
         state = next
         audioUnit?.update(state: next)
+    }
+
+    // MARK: - Shared settings
+    //
+    // The theme chip and panic, from the package. Every plug-in in the suite
+    // wanted the same ones, which is the whole argument for having a
+    // foundation applied to interface rather than to theory.
+
+    private var settingsRow: some View {
+        HStack(spacing: MelGenMetrics.space2) {
+            ThemeChip(preference: Binding(get: { themePreference },
+                                          set: { themeRaw = $0.rawValue }),
+                      theme: theme)
+            Spacer(minLength: 0)
+                Button("Panic") { audioUnit?.panic() }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.warning)
+                    .frame(minHeight: MelGenMetrics.controlHeight)
+                    .accessibilityHint("Ends every note this plug-in is holding")
+        }
     }
 }
